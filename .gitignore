@@ -1,0 +1,9 @@
+eln-cache/
+elpaca/
+init.el
+early-init.el
+history
+projectile-bookmarks.eld
+transient
+tree-sitter/
+auto-save-list/
