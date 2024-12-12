@@ -29,8 +29,8 @@ by delegating to the =init.el=.
       default-frame-alist '((tool-bar-lines		.	0)
     						(menu-bar-lines		.	0)
     						(vertical-scroll-bars)
-    						(left-fringe		.	8)
-    						(right-fringe		.	13)
+    						(left-fringe		.	15)
+    						(right-fringe		.	15)
     						(internal-border-width	.	4)
     						(fullscreen		.	maximized))
       ;; Explicitly set modes disabled in `default-frame-alist' to nil
@@ -142,7 +142,7 @@ once Emacs is done loading.
   :ensure nil
   :custom
   ;; ====== Better defaults ======
-  (auto-save-default t) ; Enable auto-save (use `recover-file' or `recover-session' to recover)
+  (auto-save-default nil) ; Enable auto-save (use `recover-file' or `recover-session' to recover)
   (auto-save-file-name-transforms ; Set file naming transform for `auto-save'
    `(;; Prefix tramp autosaves with "tramp-"
 	 ("\\`/[^/]*:\\([^/]*/\\)*\\([^/]*\\)\\'" ,(concat auto-save-list-file-prefix "tramp-\\2") sha1)
@@ -405,19 +405,129 @@ once Emacs is done loading.
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
+(defun my/set-tab-theme ()
+  (let ((bg (face-attribute 'default :background))
+		(fg (face-attribute 'default :foreground))
+		(hg (face-attribute 'region :background))
+		(base (face-attribute 'default :background))
+		(box-width (/ (line-pixel-height) 4)))
+	(set-face-attribute 'tab-line nil
+						:background base
+						:foreground fg
+						:height 0.8
+						:inherit nil
+						:box (list :line-width -1 :color base)
+						)
+	(set-face-attribute 'tab-line-tab nil
+						:foreground fg
+						:background bg
+						:weight 'normal
+						:inherit nil
+						:box (list :line-width box-width :color bg))
+	(set-face-attribute 'tab-line-tab-inactive nil
+						:foreground fg
+						:background base
+						:weight 'normal
+						:inherit nil
+						:box (list :line-width box-width :color base))
+	(set-face-attribute 'tab-line-highlight nil
+						:foreground fg
+						:background hg
+						:weight 'normal
+						:inherit nil
+						:box (list :line-width box-width :color hg))
+	(set-face-attribute 'tab-line-tab-current nil
+						:foreground fg
+						:background hg
+						:weight 'normal
+						:inherit nil
+						:box (list :line-width box-width :color hg))))
+
+(defun my/tab-line-name-buffer (buffer &rest _buffers)
+  "Create name for tab with padding and truncation.
+If buffer name is shorter than `tab-line-tab-max-width' it gets
+centered with spaces, otherwise it is truncated, to preserve
+equal width for all tabs.  This function also tries to fit as
+many tabs in window as possible, so if there are no room for tabs
+with maximum width, it calculates new width for each tab and
+truncates text if needed.  Minimal width can be set with
+`tab-line-tab-min-width' variable."
+  (with-current-buffer buffer
+    (let* ((window-width (window-width (get-buffer-window)))
+           (tab-amount (length (tab-line-tabs-window-buffers)))
+           (window-max-tab-width (if (>= (* (+ tab-line-tab-max-width 3) tab-amount) window-width)
+                                     (/ window-width tab-amount)
+                                   tab-line-tab-max-width))
+           (tab-width (- (cond ((> window-max-tab-width tab-line-tab-max-width)
+                                tab-line-tab-max-width)
+                               ((< window-max-tab-width tab-line-tab-min-width)
+                                tab-line-tab-min-width)
+                               (t window-max-tab-width))
+                         3)) ;; compensation for ' x ' button
+           (buffer-name (string-trim (buffer-name)))
+           (name-width (length buffer-name)))
+      (if (>= name-width tab-width)
+          (concat  " " (truncate-string-to-width buffer-name (- tab-width 2)) "…")
+        (let* ((padding (make-string (+ (/ (- tab-width name-width) 2) 1) ?\s))
+               (buffer-name (concat padding buffer-name)))
+          (concat buffer-name (make-string (- tab-width (length buffer-name)) ?\s)))))))
+
+(defun tab-line-close-tab (&optional e)
+  "Close the selected tab.
+If tab is presented in another window, close the tab by using
+`bury-buffer` function.  If tab is unique to all existing
+windows, kill the buffer with `kill-buffer` function.  Lastly, if
+no tabs left in the window, it is deleted with `delete-window`
+function."
+  (interactive "e")
+  (let* ((posnp (event-start e))
+         (window (posn-window posnp))
+         (buffer (get-pos-property 1 'tab (car (posn-string posnp)))))
+    (with-selected-window window
+      (let ((tab-list (tab-line-tabs-window-buffers))
+            (buffer-list (flatten-list
+                          (seq-reduce (lambda (list window)
+                                        (select-window window t)
+                                        (cons (tab-line-tabs-window-buffers) list))
+                                      (window-list) nil))))
+        (select-window window)
+        (if (> (seq-count (lambda (b) (eq b buffer)) buffer-list) 1)
+            (progn
+              (if (eq buffer (current-buffer))
+                  (bury-buffer)
+                (set-window-prev-buffers window (assq-delete-all buffer (window-prev-buffers)))
+                (set-window-next-buffers window (delq buffer (window-next-buffers))))
+              (unless (cdr tab-list)
+                (ignore-errors (delete-window window))))
+          (and (kill-buffer buffer)
+               (unless (cdr tab-list)
+                 (ignore-errors (delete-window window)))))))))
+
 (use-package tab-line
   :ensure nil
   :demand t
   :after evil
-  :init
-  (global-tab-line-mode)
+  :config
+  (defcustom tab-line-tab-min-width 10
+    "Minimum width of a tab in characters."
+    :type 'integer
+    :group 'tab-line)
+
+  (defcustom tab-line-tab-max-width 30
+    "Maximum width of a tab in characters."
+    :type 'integer
+    :group 'tab-line)
+
+  :hook (after-init . global-tab-line-mode)
+  :hook (tab-line-mode . (lambda()(my/set-tab-theme)))
   :bind
   (:map evil-normal-state-map
 		("L" . tab-line-switch-to-next-tab)
 		("H" . tab-line-switch-to-prev-tab))
   :custom
-  (tab-line-close-button-show nil)
+  (tab-line-close-button-show t)
   (tab-line-new-button-show nil)
+  (tab-line-tab-name-function #'my/tab-line-name-buffer)
   (tab-line-tabs-buffer-group-function 'tab-line-tabs-buffer-group-by-project)
   (tab-line-separator ""))
 #+end_src
@@ -780,7 +890,11 @@ once Emacs is done loading.
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
+(use-package transient
+  :ensure (:type git :host github :repo "magit/transient"))
+
 (use-package magit
+  :demand t
   :general
   (avi/leader-keys
 	"g g" '(magit-status :wk "status")
@@ -800,6 +914,10 @@ once Emacs is done loading.
   (git-commit-fill-column 72)
   :config
   (setq magit-buffer-name-format (concat "*" magit-buffer-name-format "*")))
+
+(use-package magit-todos
+  :after magit
+  :config (magit-todos-mode 1))
 #+end_src
 
 #+begin_src emacs-lisp
@@ -1170,15 +1288,16 @@ once Emacs is done loading.
 	"p" '(:keymap project-prefix-map :which-key "project"))
   :custom
   (project-switch-commands '((project-find-file "file" ?f)
-							 (magit-project-status "vc" ?m)
+							 (magit-project-status "vc" ?g)
 							 (project-dired "dired" ?d)
 							 (project-shell "shell" ?t)
 							 (project-async-shell-command "async shell" ?&))))
 #+end_src
 
-#+begin_src emacs-lisp :tangle "init.el"
+#+begin_src emacs-lisp
 (use-package tabspaces
   :demand t
+  :hook (after-init . tabspaces-mode) ;; use this only if you want the minor-mode loaded at startup. 
   :general
   (avi/leader-keys
 	"TAB o" '(tabspaces-open-or-create-project-and-workspace :wk "open")
@@ -1187,14 +1306,20 @@ once Emacs is done loading.
 	"TAB c" '(tabspaces-clear-buffers :wk "clear"))
   :custom
   (tabspaces-use-filtered-buffers-as-default t)
-  (tabspaces-default-tab "*scratch*")
+  (tabspaces-default-tab "Default")
   (tabspaces-remove-to-default t)
-  (tabspaces-include-buffers '("*scratch*"))
+  (tabspaces-include-buffers '("*scratch*" "*Messages*"))
   (tabspaces-initialize-project-with-todo nil)
   (tabspaces-keymap-prefix nil)
   (tabspaces-session nil)
   :config
   (tabspaces-mode t)
+
+  (defun tabspaces--tab-post-open-function (_tab)
+	"Reset buffer list on new tab creation."
+	(tabspaces-reset-buffer-list))
+
+  (add-to-list 'tab-bar-tab-post-open-functions #'tabspaces--tab-post-open-function)
   ;; Filter Buffers for Consult-Buffer
 
   (with-eval-after-load 'consult
@@ -1279,7 +1404,7 @@ once Emacs is done loading.
 								   (projectile-vc)))
 #+end_src
 
-#+begin_src emacs-lisp :tangle "init.el"
+#+begin_src emacs-lisp
 (use-package tab-bar
   :ensure nil
   :init
@@ -1294,13 +1419,18 @@ The default tab-bar name uses the buffer name."
   :custom
   (tab-bar-mode t)
   (tab-bar-show t)
-  (tab-bar-new-tab-choice "*scratch*")
-  :config
-  (with-eval-after-load 'projectile
-	(setq tab-bar-tab-name-function #'avi/name-tab-by-project-or-default)))
+  (tab-bar-new-tab-choice "*scratch*"))
+  ;; :config
+  ;; (with-eval-after-load 'projectile
+  ;; 	(setq tab-bar-tab-name-function #'avi/name-tab-by-project-or-default)))
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
+(use-package markdown-mode
+  :after eglot)
+#+end_src
+
+#+begin_src emacs-lisp
   (use-package activities
     :demand t
     :after tab-bar
@@ -1457,7 +1587,6 @@ The default tab-bar name uses the buffer name."
 
   ;; Overall timeout when connecting to LSP servers.
   (eglot-connect-timeout 10)
-  ;;(setf (plist-get eglot-events-buffer-config :size) 0)
   (eglot-ignored-server-capabilities '( :documentHighlightProvider))
 
   (process-adaptive-read-buffering nil)
@@ -1474,6 +1603,7 @@ The default tab-bar name uses the buffer name."
   (completion-category-overrides '((eglot (styles orderless))))
 
   :config
+  (setf (plist-get eglot-events-buffer-config :size) 0)
   (fset #'jsonrpc--log-event #'ignore))
 #+end_src
 
@@ -1756,7 +1886,7 @@ The default tab-bar name uses the buffer name."
 	"a l" '(avy-goto-line :wk goto-line)))
 #+end_src
 
-#+begin_src emacs-lisp :tangle "init.el"
+#+begin_src emacs-lisp
 (use-package multiple-cursors
   :hook (prog-mode . multiple-cursors-mode))
 #+end_src
@@ -1764,5 +1894,172 @@ The default tab-bar name uses the buffer name."
 #+begin_src emacs-lisp :tangle "init.el"
 (use-package combobulate
   :ensure (:type git :host github :repo "mickeynp/combobulate")
+  :custom
+  (combobulate-key-prefix "C-c o")
   :hook (prog-mode . combobulate-mode))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package rg
+  :config
+  (setq rg-group-result t)
+  (setq rg-hide-command t)
+  (setq rg-show-columns nil)
+  (setq rg-show-header t)
+  (setq rg-custom-type-aliases nil)
+  (setq rg-default-alias-fallback "all"))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package dape
+  :ensure t 
+
+  :config
+  ;; Turn on global bindings for setting breakpoints with mouse
+  (dape-breakpoint-global-mode)
+
+  ;; Info buffers to the right
+  (setq dape-buffer-window-arrangement 'right)
+
+  ;; Info buffers like gud (gdb-mi)
+  (setq dape-buffer-window-arrangement 'gud)
+  (setq dape-info-hide-mode-line nil)
+
+  ;; Pulse source line (performance hit)
+  ;; (add-hook 'dape-display-source-hook 'pulse-momentary-highlight-one-line)
+
+  ;; Showing inlay hints
+  (setq dape-inlay-hints t)
+
+  ;; Save buffers on startup, useful for interpreted languages
+  (add-hook 'dape-start-hook (lambda () (save-some-buffers t t)))
+
+  ;; Kill compile buffer on build success
+  (add-hook 'dape-compile-hook 'kill-buffer))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package elfeed
+  :demand t
+  :hook (elfeed-search-mode-hook . elfeed-update)
+  :config
+  (defun concatenate-authors (authors-list)
+	"Given AUTHORS-LIST, list of plists; return string of all authors concatenated."
+	(if (> (length authors-list) 1)
+		(format "%s et al." (plist-get (nth 0 authors-list) :name))
+	  (plist-get (nth 0 authors-list) :name)))
+
+  (defun my-search-print-fn (entry)
+    "Print ENTRY to the buffer."
+    (let* ((date (elfeed-search-format-date (elfeed-entry-date entry)))
+           (title (or (elfeed-meta entry :title)
+                      (elfeed-entry-title entry) ""))
+           (title-faces (elfeed-search--faces (elfeed-entry-tags entry)))
+           (entry-authors (concatenate-authors
+                           (elfeed-meta entry :authors)))
+           (title-width (- (window-width) 10
+                           elfeed-search-trailing-width))
+           (title-column (elfeed-format-column
+                          title 100
+                          :left))
+           (entry-score (elfeed-format-column (number-to-string (elfeed-score-scoring-get-score-from-entry entry)) 10 :left))
+           (authors-column (elfeed-format-column entry-authors 40 :left)))
+      (insert (propertize date 'face 'elfeed-search-date-face) " ")
+
+      (insert (propertize title-column
+                          'face title-faces 'kbd-help title) " ")
+      (insert (propertize authors-column
+                          'kbd-help entry-authors) " ")
+      (insert entry-score " ")))
+
+  (setq elfeed-search-print-entry-function #'my-search-print-fn)
+  (setq elfeed-search-date-format '("%y-%m-%d" 10 :left))
+  (setq elfeed-search-title-max-width 110)
+  (setq elfeed-search-filter "@2-week-ago +unread")
+  (setq elfeed-feeds '("http://export.arxiv.org/api/query?search_query=cat:stat.ML&start=0&max_results=100&sortBy=submittedDate&sortOrder=descending" "http://export.arxiv.org/api/query?search_query=cat:cs.LG&start=0&max_results=100&sortBy=submittedDate&sortOrder=descending" "http://export.arxiv.org/api/query?search_query=cat:cs.NE&start=0&max_results=100&sortBy=submittedDate&sortOrder=descending" "http://export.arxiv.org/api/query?search_query=cat:cs.AI&start=0&max_results=100&sortBy=submittedDate&sortOrder=descending" "http://export.arxiv.org/api/query?search_query=cat:cs.CL&start=0&max_results=100&sortBy=submittedDate&sortOrder=descending" "http://export.arxiv.org/api/query?search_query=cat:cs.CV&start=0&max_results=100&sortBy=submittedDate&sortOrder=descending" "https://sachachua.com/blog/category/emacs-news/feed/index.xml"))
+
+  (defun robo/elfeed-entry-to-arxiv ()
+    "Fetch an arXiv paper into the local library from the current elfeed entry."
+    (interactive)
+    (let* ((link (elfeed-entry-link elfeed-show-entry))
+           (match-idx (string-match "arxiv.org/abs/\\([0-9.]*\\)" link))
+           (matched-arxiv-number (match-string 1 link)))
+      (when matched-arxiv-number
+        (message "Going to arXiv: %s" matched-arxiv-number)
+        (arxiv-get-pdf-add-bibtex-entry matched-arxiv-number "~/Documents/arxiv.bib" "~/Documents/arxiv/")))))
+
+(use-package elfeed-score
+  :demand t
+  :after elfeed
+  :config
+  (elfeed-score-load-score-file "~/.emacs.d/elfeed.score") ; See the elfeed-score documentation for the score file syntax
+  (elfeed-score-enable)
+  (define-key elfeed-search-mode-map "=" elfeed-score-map))
+
+(use-package org-ref
+  :demand t
+  :after org
+  :config
+  (setq bibtex-completion-bibliography '("~/Documents/arxiv.bib")
+		bibtex-completion-library-path '("~/Documents/arxiv/")
+		bibtex-completion-notes-path "~/Documents/notes/"
+		bibtex-completion-notes-template-multiple-files "* ${author-or-editor}, ${title}, ${journal}, (${year}) :${=type=}: \n\nSee [[cite:&${=key=}]]\n"
+
+		bibtex-completion-additional-search-fields '(keywords)
+		bibtex-completion-display-formats
+		'((article       . "${=has-pdf=:1}${=has-note=:1} ${year:4} ${author:36} ${title:*} ${journal:40}")
+		  (inbook        . "${=has-pdf=:1}${=has-note=:1} ${year:4} ${author:36} ${title:*} Chapter ${chapter:32}")
+		  (incollection  . "${=has-pdf=:1}${=has-note=:1} ${year:4} ${author:36} ${title:*} ${booktitle:40}")
+		  (inproceedings . "${=has-pdf=:1}${=has-note=:1} ${year:4} ${author:36} ${title:*} ${booktitle:40}")
+		  (t             . "${=has-pdf=:1}${=has-note=:1} ${year:4} ${author:36} ${title:*}"))
+		bibtex-completion-pdf-open-function
+		(lambda (fpath)
+		  (call-process "open" nil 0 nil fpath)))
+  (setq bibtex-dialect 'biblatex)
+  (setq bibtex-autokey-year-length 4
+		bibtex-autokey-name-year-separator "-"
+		bibtex-autokey-year-title-separator "-"
+		bibtex-autokey-titleword-separator "-"
+		bibtex-autokey-titlewords 2
+		bibtex-autokey-titlewords-stretch 1
+		bibtex-autokey-titleword-length 5))
+
+(use-package citar
+  :config
+  (require 'citar-org)
+  (setq citar-bibliography "~/Documents/arxiv.bib"
+        citar-library-paths '("~/Documents/arxiv/")
+        citar-file-extensions '("pdf" "org" "md")
+        citar-file-open-function #'find-file)
+
+  (defun robo/citar-full-names (names)
+    "Transform names like LastName, FirstName to FirstName LastName."
+    (when (stringp names)
+      (mapconcat
+       (lambda (name)
+         (if (eq 1 (length name))
+             (split-string name " ")
+           (let ((split-name (split-string name ", ")))
+             (cl-concatenate 'string (nth 1 split-name) " " (nth 0 split-name)))))
+       (split-string names " and ") ", ")))
+
+  (setq citar-display-transform-functions
+        '((t . citar-clean-string)
+          (("author" "editor") . robo/citar-full-names)))
+  (setq citar-templates
+        '((main . "${author editor:55}     ${date year issued:4}     ${title:55}")
+          (suffix . "  ${tags keywords keywords:40}")
+          (preview . "${author editor} ${title}, ${journal publisher container-title collection-title booktitle} ${volume} (${year issued date}).\n")
+          (note . "#+title: Notes on ${author editor}, ${title}")))
+  ;; use consult-completing-read for enhanced interface
+  (advice-add #'completing-read-multiple :override #'consult-completing-read-multiple))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package pdf-tools
+  :mode ("\\.[pP][dD][fF]\\'" . pdf-view-mode)
+  :hook (pdf-view-mode . (lambda () (pdf-view-midnight-minor-mode)))
+  :hook (pdf-view-mode . (lambda () (display-line-numbers-mode -1)))
+  :config
+  (pdf-loader-install))
 #+end_src
