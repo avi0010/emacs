@@ -665,6 +665,7 @@ function."
     ;; keybindings defined in projectile
 
     "s" '(:ignore t :which-key "search")
+    "c" '(:ignore t :which-key "cursor")
     ;; keybindings defined in consult
 
     "t"  '(:ignore t :which-key "toggle")
@@ -917,6 +918,7 @@ function."
 
 (use-package magit-todos
   :after magit
+  :demand t
   :config (magit-todos-mode 1))
 #+end_src
 
@@ -1639,27 +1641,27 @@ The default tab-bar name uses the buffer name."
 (use-package python-ts-mode
   :ensure nil
   :hook
-  (python-ts-mode . eglot-ensure)
-  :general
-  (python-mode-map
-   :states 'insert
-   "TAB" 'avi/py-indent-or-complete)
+  (python-ts-mode . avi/setup-eglot-with-venv)
   :init
-  (defun avi/py-indent-or-complete ()
-	(interactive "*")
-	(window-configuration-to-register py--windows-config-register)
-	(cond ((use-region-p)
-		   (py-indent-region (region-beginning) (region-end)))
-		  ((or (bolp)   
-			   (member (char-before) (list 9 10 12 13 32 ?:  ;; ([{
-										   ?\) ?\] ?\}))
-			   ;; (not (looking-at "[ \t]*$"))
-			   )
-		   (py-indent-line))
-		  ((comint-check-proc (current-buffer))
-		   (ignore-errors (completion-at-point)))
-		  (t
-		   (completion-at-point))))
+  (defun avi/activate-venv-from-project ()
+	"Activate the virtual environment in the project's 'venv' directory."
+	(let* ((project (project-current t))
+		   (venv-dir (if project
+						 (expand-file-name "venv" (project-root project))
+					   nil)))
+	  (if (and venv-dir (file-exists-p venv-dir))
+		  (progn
+			(require 'pyvenv)
+			(pyvenv-activate venv-dir)
+			(message "Activated virtual environment: %s" venv-dir))
+		(message "No virtual environment found in the project directory."))))
+
+  (defun avi/setup-eglot-with-venv ()
+	"Set up eglot after activating the virtual environment."
+	(interactive)
+	(avi/activate-venv-from-project)
+	(eglot-ensure))
+
   :custom
   (python-indent-offset 4))
 #+end_src
@@ -1773,6 +1775,7 @@ The default tab-bar name uses the buffer name."
    '((latex . t)
      (gnuplot . t)))
 
+  (setq org-format-latex-options (plist-put org-format-latex-options :scale 1.6))
   (add-to-list 'org-structure-template-alist '("sh" . "src shell"))
   (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
   (add-to-list 'org-structure-template-alist '("py" . "src python"))
@@ -1873,6 +1876,12 @@ The default tab-bar name uses the buffer name."
   (avi/leader-keys
 	"d f" '(consult-denote-find :wk "open")
 	"d g" '(consult-denote-grep :wk "grep")))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package org-fragtog
+  :after org
+  :hook (org-mode . org-fragtog-mode))
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
@@ -2012,9 +2021,7 @@ The default tab-bar name uses the buffer name."
 		  (incollection  . "${=has-pdf=:1}${=has-note=:1} ${year:4} ${author:36} ${title:*} ${booktitle:40}")
 		  (inproceedings . "${=has-pdf=:1}${=has-note=:1} ${year:4} ${author:36} ${title:*} ${booktitle:40}")
 		  (t             . "${=has-pdf=:1}${=has-note=:1} ${year:4} ${author:36} ${title:*}"))
-		bibtex-completion-pdf-open-function
-		(lambda (fpath)
-		  (call-process "open" nil 0 nil fpath)))
+		bibtex-completion-pdf-open-function 'find-file-other-window)
   (setq bibtex-dialect 'biblatex)
   (setq bibtex-autokey-year-length 4
 		bibtex-autokey-name-year-separator "-"
@@ -2062,4 +2069,30 @@ The default tab-bar name uses the buffer name."
   :hook (pdf-view-mode . (lambda () (display-line-numbers-mode -1)))
   :config
   (pdf-loader-install))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package ultra-scroll
+  :ensure (ultra-scroll :host github :repo "jdtsmith/ultra-scroll")
+  :init
+  (setq scroll-conservatively 101 ; important!
+    scroll-margin 0)
+  :config
+  (ultra-scroll-mode 1))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package evil-mc
+  :demand t
+  :after evil
+  :general
+  (avi/leader-keys
+	"c m" '(evil-mc-make-all-cursors :wk "make")
+	"c q" '(evil-mc-undo-all-cursors :wk "undo")
+	"c n" '(evil-mc-make-and-goto-next-match :wk "next")
+	"c N" '(evil-mc-make-and-goto-prev-match :wk "prev")
+	"c b" '(evil-mc-make-cursor-in-visual-selection-beg :wk "begin")
+	"c e" '(evil-mc-make-cursor-in-visual-selection-end :wk "end"))
+  :config
+  (global-evil-mc-mode))
 #+end_src
