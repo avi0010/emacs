@@ -61,7 +61,7 @@ once Emacs is done loading.
 
 ** Elpaca
 #+begin_src emacs-lisp :tangle "init.el"
-(defvar elpaca-installer-version 0.7)
+(defvar elpaca-installer-version 0.9)
 (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
 (defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
@@ -372,27 +372,27 @@ once Emacs is done loading.
 (use-package flymake
   :ensure nil
   :hook ((prog-mode conf-mode) . flymake-mode)
-  :init
-  ;; Better fringe bitmaps
-  (define-fringe-bitmap '+flymake-bitmap-left-arrow-hi-res
-    [#b00000011110
-     #b00000111100
-     #b00001111000
-     #b00011110000
-     #b00111100000
-     #b01111000000
-     #b01111000000
-     #b00111100000
-     #b00011110000
-     #b00001111000
-     #b00000111100
-     #b00000011110]
-    nil 13)
+  ;; :init
+  ;; ;; Better fringe bitmaps
+  ;; (define-fringe-bitmap '+flymake-bitmap-left-arrow-hi-res
+  ;;   [#b00000011110
+  ;;    #b00000111100
+  ;;    #b00001111000
+  ;;    #b00011110000
+  ;;    #b00111100000
+  ;;    #b01111000000
+  ;;    #b01111000000
+  ;;    #b00111100000
+  ;;    #b00011110000
+  ;;    #b00001111000
+  ;;    #b00000111100
+  ;;    #b00000011110]
+  ;;   nil 13)
   :custom
   (flymake-fringe-indicator-position 'right-fringe)
-  (flymake-error-bitmap '(+flymake-bitmap-left-arrow-hi-res compilation-error))
-  (flymake-warning-bitmap '(+flymake-bitmap-left-arrow-hi-res compilation-warning))
-  (flymake-note-bitmap '(+flymake-bitmap-left-arrow-hi-res compilation-info))
+  ;; (flymake-error-bitmap '(+flymake-bitmap-left-arrow-hi-res compilation-error))
+  ;; (flymake-warning-bitmap '(+flymake-bitmap-left-arrow-hi-res compilation-warning))
+  ;; (flymake-note-bitmap '(+flymake-bitmap-left-arrow-hi-res compilation-info))
   :config
   ;; Use the session's `load-path' with flymake
   (with-eval-after-load 'elisp-mode
@@ -402,6 +402,10 @@ once Emacs is done loading.
   (with-eval-after-load 'fringe
     (set-fringe-style '(8 . 13))))
 
+;; Flymake-collection setup
+(use-package flymake-collection
+  :after flymake
+  :hook (after-init-hook . flymake-collection-hook-setup))
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
@@ -1076,7 +1080,7 @@ function."
   (advice-add 'pcomplete-completions-at-point :around #'cape-wrap-purify))
 #+end_src
 
-#+begin_src emacs-lisp :tangle "init.el"
+#+begin_src emacs-lisp
 (use-package kind-icon
   :demand t
   :after corfu
@@ -1252,6 +1256,12 @@ function."
   :config
   (nerd-icons-completion-mode)
   (add-hook 'marginalia-mode-hook #'nerd-icons-completion-marginalia-setup))
+
+(use-package nerd-icons-corfu
+  :demand t
+  :after corfu
+  :config
+  (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
@@ -1458,6 +1468,8 @@ The default tab-bar name uses the buffer name."
   (dired-listing-switches "-l --almost-all --human-readable --group-directories-first --no-group")
   (dired-create-destination-dirs 'ask)
   (dired-create-destination-dirs-on-trailing-dirsep t)
+  (dired-recursive-copies 'always)
+  (dired-recursive-deletes 'always)
   (ls-lisp-dirs-first t)
   (delete-by-moving-to-trash t)
   (ls-lisp-use-insert-directory-program nil)
@@ -1472,6 +1484,21 @@ The default tab-bar name uses the buffer name."
 	 (".*" "xdg-open"))))
 #+end_src
 
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package diredfl
+  :after dired
+  :hook (dired-mode . diredfl-mode))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package dired-quick-sort
+  :after dired
+  :general
+  (dired-mode-map
+   :states 'normal
+   "s" 'hydra-dired-quick-sort/body)
+  )
+#+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
 (use-package vterm
@@ -1567,8 +1594,9 @@ The default tab-bar name uses the buffer name."
 #+begin_src emacs-lisp :tangle "init.el"
 (use-package eglot
   :ensure nil
-  :hook ((eglot-managed-mode . (lambda () (flymake-mode +1))))
+  ;; :hook ((eglot-managed-mode . (lambda () (flymake-mode +1))))
   :hook (eglot-managed-mode . eglot-inlay-hints-mode)
+  :hook (eglot-managed-mode . (lambda () (add-to-list 'flymake-diagnostic-functions 'eglot-flymake-backend)))
   :hook (eglot-managed-mode .
 							(lambda () (setq eldoc-documentation-functions
 											 '(flymake-eldoc-function
@@ -1606,6 +1634,7 @@ The default tab-bar name uses the buffer name."
 
   :config
   (setf (plist-get eglot-events-buffer-config :size) 0)
+  (add-to-list 'eglot-stay-out-of 'flymake-diagnostic-functions)
   (fset #'jsonrpc--log-event #'ignore))
 #+end_src
 
@@ -1663,7 +1692,19 @@ The default tab-bar name uses the buffer name."
 	(eglot-ensure))
 
   :custom
+  (python-flymake-command nil)
   (python-indent-offset 4))
+
+(use-package flymake-ruff
+  :hook (python-ts-mode . flymake-ruff-load))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package apheleia
+  :config
+  (apheleia-global-mode +1)
+  (setf (alist-get 'python-ts-mode apheleia-mode-alist)
+      '(ruff-isort ruff)))
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
@@ -1781,6 +1822,8 @@ The default tab-bar name uses the buffer name."
   (add-to-list 'org-structure-template-alist '("py" . "src python"))
   (add-to-list 'org-structure-template-alist '("lt" . "src LaTeX"))
   (add-to-list 'org-structure-template-alist '("cpp" . "src C"))
+  (add-to-list 'org-emphasis-alist '("*" (:foreground "yellow")))
+  (add-to-list 'org-emphasis-alist '("=" (:foreground "pale green")))
 
   (defvar avi-org-custom-daily-agenda
   	`((tags-todo "*"
@@ -2071,7 +2114,7 @@ The default tab-bar name uses the buffer name."
   (pdf-loader-install))
 #+end_src
 
-#+begin_src emacs-lisp :tangle "init.el"
+#+begin_src emacs-lisp
 (use-package ultra-scroll
   :ensure (ultra-scroll :host github :repo "jdtsmith/ultra-scroll")
   :init
@@ -2095,4 +2138,25 @@ The default tab-bar name uses the buffer name."
 	"c e" '(evil-mc-make-cursor-in-visual-selection-end :wk "end"))
   :config
   (global-evil-mc-mode))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package spacious-padding
+  :demand t
+  :custom
+  (spacious-padding-widths
+   '( :internal-border-width 20
+	  :header-line-width 5
+	  :mode-line-width 8
+	  :tab-width 4
+	  :right-divider-width 30
+	  :scroll-bar-width 8
+	  :fringe-width 15))
+
+  (spacious-padding-subtle-mode-line
+   `( :mode-line-active 'default
+	  :mode-line-inactive vertical-border))
+
+  :config
+  (spacious-padding-mode 1))
 #+end_src
