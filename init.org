@@ -1264,7 +1264,7 @@ function."
   (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
 #+end_src
 
-#+begin_src emacs-lisp :tangle "init.el"
+#+begin_src emacs-lisp
 ;; Configure Tempel
 (use-package tempel
   :ensure t
@@ -2145,10 +2145,10 @@ The default tab-bar name uses the buffer name."
   :demand t
   :custom
   (spacious-padding-widths
-   '( :internal-border-width 20
+   '( :internal-border-width 32
 	  :header-line-width 5
 	  :mode-line-width 8
-	  :tab-width 4
+	  :tab-width 5
 	  :right-divider-width 30
 	  :scroll-bar-width 8
 	  :fringe-width 15))
@@ -2160,3 +2160,18 @@ The default tab-bar name uses the buffer name."
   :config
   (spacious-padding-mode 1))
 #+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package yasnippet
+  :hook (prog-mode . yas-minor-mode))
+
+(use-package yasnippet-snippets
+  :after yasnippet)
+
+(use-package yasnippet-capf
+  :demand t
+  :after cape yasnippet
+  :config
+  ;; enable yasnippet-capf everywhere
+  (add-to-list 'completion-at-point-functions #'yasnippet-capf))
+  #+end_src
