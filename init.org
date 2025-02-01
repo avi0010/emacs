@@ -1058,6 +1058,7 @@ function."
   (corfu-preselect-first t)   
   ;; (corfu-commit-predicate nil)   ;; Do not commit selected candidates on next input
   (corfu-quit-at-boundary t)     ;; Automatically quit at word boundary
+  (corfu-on-exact-match 'nil)
   (corfu-quit-no-match t)        ;; Automatically quit if there is no match
   ;; (corfu-preview-current nil)    ;; Disable current candidate preview
   ;; (corfu-preselect-first nil)    ;; Disable candidate preselection
