@@ -61,6 +61,7 @@ once Emacs is done loading.
 
 ** Elpaca
 #+begin_src emacs-lisp :tangle "init.el"
+(setq init-start-time (current-time))
 (defvar elpaca-installer-version 0.9)
 (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
@@ -110,11 +111,19 @@ once Emacs is done loading.
   (run-with-idle-timer
    1 nil
    (lambda ()
-     (setq gc-cons-percentage 0.2
-           gc-cons-threshold (* 1024 1024 20))
-     (message "gc-cons-threshold & file-name-handler-alist restored")
-     (when (boundp 'after-focus-change-function)
-       (add-function :after after-focus-change-function #'gc-after-focus-change)))))
+	 (setq gc-cons-percentage 0.2
+		   gc-cons-threshold (* 1024 1024 20))
+	 (message "gc-cons-threshold & file-name-handler-alist restored")
+	 
+	 (let ((init-time (float-time (time-subtract (current-time) init-start-time)))
+		   (total-time (string-to-number (emacs-init-time "%f"))))
+	   (message (concat
+				 (propertize "Startup time: " 'face 'bold)
+				 (format "%.2fs " init-time)
+				 (propertize (format "(+ %.2fs system time)"
+									 (- total-time init-time)) 'face 'shadow))))
+	 (when (boundp 'after-focus-change-function)
+	   (add-function :after after-focus-change-function #'gc-after-focus-change)))))
 
 (with-eval-after-load 'elpaca
   (add-hook 'elpaca-after-init-hook 'reset-init-values))
@@ -155,7 +164,7 @@ once Emacs is done loading.
   (fast-but-imprecise-scrolling t)
   (scroll-step 1)
   (scroll-margin 1)
-
+  (xref-search-program 'ripgrep)
   (use-package-always-defer t)
   (use-package-always-ensure t)
 
@@ -408,7 +417,7 @@ once Emacs is done loading.
   :hook (after-init-hook . flymake-collection-hook-setup))
 #+end_src
 
-#+begin_src emacs-lisp :tangle "init.el"
+#+begin_src emacs-lisp
 (defun my/set-tab-theme ()
   (let ((bg (face-attribute 'default :background))
 		(fg (face-attribute 'default :foreground))
@@ -552,6 +561,12 @@ function."
 #+begin_src emacs-lisp :tangle "init.el"
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package hs-minor-mode
+  :ensure nil
+  :hook (prog-mode . hs-minor-mode))
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
@@ -918,6 +933,7 @@ function."
   (magit-log-arguments '("--graph" "--decorate" "--color"))
   (git-commit-fill-column 72)
   :config
+  (setopt magit-format-file-function #'magit-format-file-nerd-icons)  
   (setq magit-buffer-name-format (concat "*" magit-buffer-name-format "*")))
 
 (use-package magit-todos
@@ -1304,6 +1320,7 @@ function."
 							 (magit-project-status "vc" ?g)
 							 (project-dired "dired" ?d)
 							 (project-shell "shell" ?t)
+							 (project-find-regexp "grep" ?s)
 							 (project-async-shell-command "async shell" ?&))))
 #+end_src
 
@@ -2168,6 +2185,10 @@ The default tab-bar name uses the buffer name."
 
 (use-package yasnippet-snippets
   :after yasnippet)
+
+;; (use-package doom-snippets
+;;   :after yasnippet
+;;   :ensure (doom-snippets :host github :repo "doomemacs/snippets"))
 
 (use-package yasnippet-capf
   :demand t
