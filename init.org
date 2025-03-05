@@ -62,7 +62,7 @@ once Emacs is done loading.
 ** Elpaca
 #+begin_src emacs-lisp :tangle "init.el"
 (setq init-start-time (current-time))
-(defvar elpaca-installer-version 0.9)
+(defvar elpaca-installer-version 0.10)
 (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
 (defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
