@@ -856,6 +856,11 @@ function."
 		(bg-completion "#ebdbbc")
 		))
 
+(setq modus-themes-bold-constructs t
+	  modus-themes-paren-match '(bold intense underline)
+	  modus-themes-italic-constructs t)
+
+
 (load-theme 'modus-vivendi-tritanopia t)
 
 #+end_src
@@ -2255,6 +2260,14 @@ The default tab-bar name uses the buffer name."
                      #'cape-file))))
 
 (add-hook 'eglot-managed-mode-hook #'my/eglot-capf)
+#+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package exec-path-from-shell
+  :if (memq window-system '(mac ns x))  ;; Only on macOS or GUI Emacs
+  :config
+  ;; Initialize environment from shell
+  (exec-path-from-shell-initialize))
 #+end_src
 
 
