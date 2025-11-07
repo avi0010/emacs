@@ -698,7 +698,12 @@ function."
     ;; keybindings defined in consult
 
     "t"  '(:ignore t :which-key "toggle")
-    "l"  '(:ignore t :which-key "lsp"))
+    "l"  '(:ignore t :which-key "lsp")
+	
+	"le" '(flymake-show-buffer-diagnostics :which-key "flymake-buffer")
+	"lE" '(flymake-show-project-diagnostics :which-key "flymake-project")
+
+	)
 
   (avi/local-leader-keys
     :states 'normal
@@ -1140,8 +1145,7 @@ function."
 	"s s" 'consult-line
 	"s m" '(consult-mark :wk "mark")
 	"s q" '(consult-kmacro :wk "macros")
-	"s '" '(consult-register :wk "macros")
-	"l e" '(consult-flymake :wk "flymake"))
+	"s '" '(consult-register :wk "macros"))
 
   :custom
 
@@ -1222,7 +1226,7 @@ function."
 #+begin_src emacs-lisp :tangle "init.el"
 (use-package orderless
   :custom
-  (completion-styles '(substring initials basic orderless)
+  (completion-styles '(orderless substring initials basic)
 					 completion-category-defaults nil
 					 completion-ignore-case t
 					 read-buffer-completion-ignore-case t
@@ -1747,8 +1751,11 @@ The default tab-bar name uses the buffer name."
   (python-flymake-command nil)
   (python-indent-offset 4))
 
-(use-package flymake-ruff
-  :hook (python-ts-mode . flymake-ruff-load))
+;; (use-package flymake-ruff
+;;   :hook (python-ts-mode . flymake-ruff-load))
+
+(use-package flymake-pyrefly
+  :hook (python-ts-mode . pyrefly-setup-flymake-backend))
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
