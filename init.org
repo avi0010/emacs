@@ -2273,3 +2273,20 @@ The default tab-bar name uses the buffer name."
   (setq flyover-virtual-line-type 'curved-dotted-arrow)
   (setq  flyover-levels '(error warning info)))
 #+end_src
+
+#+begin_src emacs-lisp :tangle "init.el"
+(use-package indent-bars
+  :custom
+  (indent-bars-no-descend-lists 'skip) ; prevent extra bars in nested lists + skip intermediate bars
+  (indent-bars-treesit-support t)
+  (indent-bars-treesit-ignore-blank-lines-types '("module"))
+  ;; Add other languages as needed; check the wiki
+  (indent-bars-treesit-scope '((python function_definition class_definition for_statement
+	  if_statement with_statement while_statement)))
+  ;; Note: wrap likely not be needed if no-descend-list is enough
+  ;;(indent-bars-treesit-wrap '((python argument_list parameters ; for python, as an example
+  ;;				      list list_comprehension
+  ;;				      dictionary dictionary_comprehension
+  ;;				      parenthesized_expression subscript)))
+  :hook ((python-ts-mode yaml-mode) . indent-bars-mode))
+#+end_src
