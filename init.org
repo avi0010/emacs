@@ -791,6 +791,11 @@ function."
 #+end_src
 
 #+begin_src emacs-lisp :tangle "init.el"
+(use-package kaolin-themes
+  :demand t
+  :config
+  (load-theme 'kaolin-dark t))
+#+end_src
 (setq modus-vivendi-tritanopia-palette-overrides
       '(
         ;; ------------------------------------------------------------
